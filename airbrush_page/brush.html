@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<script src="code/brush.js"></script>
+<link
+  href="https://fonts.googleapis.com/css?family=Monofett"
+  rel="stylesheet"
+/>
+<link
+  href="https://fonts.googleapis.com/css?family=Press Start 2P"
+  rel="stylesheet"
+/>
+<link rel="stylesheet" href="css/brush.css" />
+
+<body
+  style="
+    background-color: #f4eee2;
+    width: 50%;
+    margin: 0 auto;
+    padding-top: 10px;
+    text-align: center;
+  "
+>
+  <div style="font-family: 'Monofett'; font-size: 64px; color: #b2cba1">
+    A I R B R U S H
+  </div>
+  <div
+    style="
+      position: absolute;
+      padding: 5px;
+      top: 20px;
+      right: 20px;
+      border-style: double;
+      border-width: 5px;
+      border-color: #6d9a86;
+      width: 20%;
+      background-color: #ecf0df;
+    "
+  >
+    <div
+      style="
+        font-family: 'Press Start 2P';
+        color: #023047;
+        font-size: 12px;
+        padding: 5px;
+      "
+    >
+      Instructions
+    </div>
+    <hr />
+    <div
+      style="
+        font-family: Helvetica;
+        color: #023047;
+        line-height: 20px;
+        font-size: 18px;
+        text-align: left;
+        padding: 5px;
+      "
+    >
+      Click and drag around the canvas to draw! <br /><br />To use the blur tool
+      (which is very slow...) click and drag between two points. The rectangular
+      selection between the two points will be blurred together. <br /><br />
+      <a href="../index.html" style="color: #023047; text-decoration: none"
+        >[Back to Main Menu]</a
+      >
+    </div>
+  </div>
+  <script>
+    createPaint(document.body);
+  </script>
+</body>
