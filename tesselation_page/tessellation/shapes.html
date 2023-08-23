@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Tessellation of Shapes</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+    <link
+      href="https://fonts.googleapis.com/css?family=Monofett"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css?family=Press Start 2P"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="container"></div>
+    <div
+      style="
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        border-style: double;
+        border-width: 5px;
+        border-color: #6d9a86;
+        background-color: #ecf0df;
+        padding: 10px;
+        width: 30%;
+      "
+    >
+      <div
+        style="
+          font-family: 'Press Start 2P';
+          font-size: 28px;
+          color: #023047;
+          text-align: center;
+        "
+      >
+        tesselations
+      </div>
+      <hr />
+      <div style="font-size: 18px">
+        This project was done as part of my computer graphics class with Dr.
+        Sowell at Rhodes College, fall 2021. <br /><br />
+        To use: Click and drag to rotate the tesselated shape. Edit shape
+        features using the menu on the right. <br /><br />
+        <a
+          href="https://github.com/hxgr4ce/tessellation"
+          target="_blank"
+          style="color: #023047; text-decoration: none"
+        >
+          Link to repo
+          <img src="../../imgs/newpage.png" style="height: 0.75em" />
+        </a>
+        <br />
+        <a href="../../index.html" style="color: #023047; text-decoration: none"
+          >[Back to Main Menu]</a
+        >
+      </div>
+    </div>
+    <script src="../lib/three.js"></script>
+    <script src="../lib/OrbitAndPanControls.js"></script>
+    <script src="../lib/Coordinates.js"></script>
+    <script src="../lib/dat.gui.min.js"></script>
+    <script src="../lib/jquery-1.8.3.min.js"></script>
+    <script src="shapes.js"></script>
+  </body>
+</html>
