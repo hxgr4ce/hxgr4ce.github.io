@@ -1,0 +1,911 @@
+<html>
+  <head>
+    <style>
+      canvas {
+        display: block;
+        margin: 10px auto;
+        width: 100%;
+        height: 75%;
+      }
+      button {
+        margin-top: 20px;
+        line-height: 60px;
+        font-weight: bold;
+        padding: 0 40px;
+        background: red;
+        border: none;
+      }
+    </style>
+    <link
+      href="https://fonts.googleapis.com/css?family=Press Start 2P"
+      rel="stylesheet"
+    />
+  </head>
+  <body style="background-color: #f4eee2">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="../lib/dat.gui.min.js"></script>
+    <script src="../lib/tw-f21.js"></script>
+    <div
+      style="
+        position: absolute;
+        padding: 5px;
+        top: 20px;
+        left: 20px;
+        border-style: double;
+        border-width: 5px;
+        border-color: #6d9a86;
+        width: 20%;
+        background-color: #ecf0df;
+      "
+    >
+      <div
+        style="
+          font-family: 'Press Start 2P';
+          color: #023047;
+          font-size: 12px;
+          padding: 5px;
+          text-align: center;
+        "
+      >
+        Dice Roll
+      </div>
+      <hr />
+      <div
+        style="
+          font-family: Helvetica;
+          color: #023047;
+          line-height: 20px;
+          font-size: 18px;
+          text-align: left;
+          padding: 5px;
+        "
+      >
+        This project was done as part of my computer graphics class with Dr.
+        Sowell at Rhodes College, fall 2021. <br /><br />
+        To use: Click "Roll Again" to roll again, use the menu on the left to
+        select the type of die you'd like to roll.
+        <br /><br />
+        <a
+          href="https://github.com/hxgr4ce/diceroll"
+          target="_blank"
+          style="color: #023047; text-decoration: none"
+        >
+          Link to repo
+          <img src="../../imgs/newpage.png" style="height: 0.75em" />
+        </a>
+        <br />
+        <a href="../../index.html" style="color: #023047; text-decoration: none"
+          >[Back to Main Menu]</a
+        >
+      </div>
+    </div>
+    <script>
+      // general setup
+      var scene = getScene();
+      var light = getLight(scene);
+      var renderer = getRenderer();
+      TW.mainInit(renderer, scene);
+      TW.cameraSetup(renderer, scene, {
+        minx: -500,
+        maxx: 500,
+        miny: 0,
+        maxy: 400,
+        minz: -500,
+        maxz: 500,
+      });
+      TW.viewFromAbove();
+      const loader = new THREE.TextureLoader();
+
+      //shape selector
+      var effectController;
+      var shape = "d6";
+
+      //roll again button
+      var button = document.createElement("button");
+      button.innerHTML = "Roll Again";
+      button.style.background = "#6d9a86";
+      button.style.position = "absolute";
+      button.style.left = "50%";
+      button.style.transform = "translateX(-50%)";
+
+      var body = document.getElementsByTagName("body")[0];
+      body.appendChild(button);
+
+      button.addEventListener("click", function () {
+        scene.remove(dice);
+        world.removeBody(diceBodies);
+        dice = makeDie();
+        diceBodies = [];
+        addDiePhysics();
+      });
+
+      //physics setup
+      var world = getPhysics();
+      var physicsMaterial = getPhysicsMaterial();
+
+      // add floor, invisible walls, and plane and their physics
+      var floor = getFloor();
+      var wall = getWall(-1000, 0, 0);
+      var wall2 = getWall(1000, 0, 0);
+      var wall3 = getWall(0, 1000, Math.PI / 2);
+      var wall4 = getWall(0, -1000, Math.PI / 2);
+      var plane = getPlane();
+      addObjectPhysics();
+
+      setupGui();
+
+      //add dice for the first time
+      var dice = makeDie();
+      var diceBodies = [];
+      addDiePhysics();
+
+      function getScene() {
+        var scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf4eee2);
+        return scene;
+      }
+
+      function getCamera() {
+        var aspectRatio = window.innerWidth / window.innerHeight;
+        var camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 10000);
+        camera.position.set(0, 2000, 0);
+        return camera;
+      }
+
+      function getLight(scene) {
+        var light = new THREE.PointLight(0xc0d6e4, 0.5, 0);
+        light.position.set(0, 1500, 0);
+        scene.add(light);
+
+        var ambientLight = new THREE.AmbientLight(0xc0d6e4);
+        scene.add(ambientLight);
+        return light;
+      }
+
+      function getRenderer() {
+        // Create the canvas with a renderer
+        var renderer = new THREE.WebGLRenderer({ antialias: true });
+        // Add the canvas to the DOM
+        document.body.appendChild(renderer.domElement);
+        return renderer;
+      }
+
+      function setupGui() {
+        effectController = { newShape: "d6" };
+        var gui = new dat.GUI();
+        gui
+          .add(effectController, "newShape", ["d20", "d8", "d6", "d4"])
+          .name("Shape");
+      }
+
+      function getPhysics() {
+        world = new CANNON.World();
+        world.gravity.set(0, -10000, 0);
+        world.broadphase = new CANNON.NaiveBroadphase();
+        world.broadphase.useBoundingBoxes = true;
+        var solver = new CANNON.GSSolver();
+        solver.iterations = 7;
+        solver.tolerance = 0.1;
+        world.solver = solver;
+        world.quatNormalizeSkip = 0;
+        world.quatNormalizeFast = false;
+        world.defaultContactMaterial.contactEquationStiffness = 1e9;
+        world.defaultContactMaterial.contactEquationRelaxation = 4;
+        return world;
+      }
+
+      function getPhysicsMaterial() {
+        var physicsMaterial = new CANNON.Material("slipperyMaterial");
+        var physicsContactMaterial = new CANNON.ContactMaterial(
+          physicsMaterial,
+          physicsMaterial,
+          { friction: 0.01, restitution: 0.5 }
+        );
+        world.addContactMaterial(physicsContactMaterial);
+        return physicsMaterial;
+      }
+
+      function getFloor() {
+        //floor beneath scene
+        var geometry = new THREE.PlaneGeometry(1000, 1000);
+        var material = new THREE.MeshBasicMaterial();
+        var floor = new THREE.Mesh(geometry, material);
+        floor.rotation.x = Math.PI / 2;
+        scene.add(floor);
+        return floor;
+      }
+
+      function getPlane() {
+        //surface dice is rolled on
+        var geometry = new THREE.PlaneGeometry(2000, 2000);
+
+        const texture = loader.load("../textures/tabletop.jpg");
+        var material = new THREE.MeshStandardMaterial({
+          map: texture,
+          side: THREE.DoubleSide,
+        });
+
+        var plane = new THREE.Mesh(geometry, material);
+        plane.position.y = 0;
+        plane.rotation.x = Math.PI / 2;
+        scene.add(plane);
+        return plane;
+      }
+
+      function getWall(zpos, xpos, rot) {
+        var geometry = new THREE.PlaneGeometry(2000, 500);
+        var material = new THREE.MeshPhongMaterial({
+          color: "#830625",
+          side: THREE.DoubleSide,
+        });
+        var wall = new THREE.Mesh(geometry, material);
+        wall.position.y = 250;
+        wall.position.x = xpos;
+        wall.position.z = zpos;
+        wall.rotation.y = rot;
+
+        return wall;
+      }
+
+      function d4() {
+        //makes custom geometry for a d4
+        var geo = new THREE.Geometry();
+        var normals = [];
+
+        geo.vertices.push(new THREE.Vector3(-100, 0, -100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(0, 100, 100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(100, 0, -100 / Math.sqrt(2)));
+
+        normals.push(
+          new THREE.Vector3(0, 0.816496580927726, -0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(0, 0.816496580927726, -0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(0, 0.816496580927726, -0.5773502691896258)
+        );
+
+        geo.vertices.push(new THREE.Vector3(0, -100, 100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(100, 0, -100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(0, 100, 100 / Math.sqrt(2)));
+
+        normals.push(
+          new THREE.Vector3(0.816496580927726, 0, 0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(0.816496580927726, 0, 0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(0.816496580927726, 0, 0.5773502691896258)
+        );
+
+        geo.vertices.push(new THREE.Vector3(0, -100, 100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(0, 100, 100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(-100, 0, -100 / Math.sqrt(2)));
+
+        normals.push(
+          new THREE.Vector3(-0.816496580927726, 0, 0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(-0.816496580927726, 0, 0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(-0.816496580927726, 0, 0.5773502691896258)
+        );
+
+        geo.vertices.push(new THREE.Vector3(0, -100, 100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(-100, 0, -100 / Math.sqrt(2)));
+        geo.vertices.push(new THREE.Vector3(100, 0, -100 / Math.sqrt(2)));
+
+        normals.push(
+          new THREE.Vector3(0, 0.816496580927726, 0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(0, 0.816496580927726, 0.5773502691896258)
+        );
+        normals.push(
+          new THREE.Vector3(0, 0.816496580927726, 0.5773502691896258)
+        );
+
+        // Generate minimum number of faces for the polygon.
+        var numFaces = 0;
+        for (var i = 0; i < geo.vertices.length; i += 3) {
+          geo.faces.push(new THREE.Face3(i, i + 1, i + 2));
+          geo.faces[numFaces].vertexNormals[0] = normals[i];
+          geo.faces[numFaces].vertexNormals[1] = normals[i + 1];
+          geo.faces[numFaces].vertexNormals[2] = normals[i + 2];
+          numFaces++;
+        }
+
+        return geo;
+      }
+
+      function d20() {
+        var geo = new THREE.Geometry();
+        var normals = [];
+        var phi = 0.5 * (1 + Math.sqrt(5));
+
+        var length = Math.sqrt(phi ** 2 + 1);
+
+        //"cap"
+        geo.vertices.push(new THREE.Vector3(0, phi, 1));
+        geo.vertices.push(new THREE.Vector3(0, phi, -1));
+        geo.vertices.push(new THREE.Vector3(-phi, 1, 0));
+
+        normals.push(new THREE.Vector3(0, phi / length, -1 / length));
+        normals.push(new THREE.Vector3(0, phi / length, -1 / length));
+        normals.push(new THREE.Vector3(0, phi / length, -1 / length));
+
+        geo.vertices.push(new THREE.Vector3(-1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(0, phi, 1));
+        geo.vertices.push(new THREE.Vector3(-phi, 1, 0));
+
+        normals.push(new THREE.Vector3(-phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, 1 / length, 0));
+
+        geo.vertices.push(new THREE.Vector3(-1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(0, phi, 1));
+
+        normals.push(new THREE.Vector3(-1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, phi / length));
+
+        geo.vertices.push(new THREE.Vector3(0, phi, 1));
+        geo.vertices.push(new THREE.Vector3(1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(phi, 1, 0));
+
+        normals.push(new THREE.Vector3(1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, phi / length));
+
+        geo.vertices.push(new THREE.Vector3(0, phi, 1));
+        geo.vertices.push(new THREE.Vector3(phi, 1, 0));
+        geo.vertices.push(new THREE.Vector3(0, phi, -1));
+
+        normals.push(new THREE.Vector3(phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, 1 / length, 0));
+
+        //"barrel"
+        geo.vertices.push(new THREE.Vector3(-1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(-phi, -1, 0));
+        geo.vertices.push(new THREE.Vector3(-phi, 1, 0));
+
+        normals.push(new THREE.Vector3(-1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, -phi / length));
+
+        geo.vertices.push(new THREE.Vector3(-1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(-phi, 1, 0));
+        geo.vertices.push(new THREE.Vector3(-phi, -1, 0));
+
+        normals.push(new THREE.Vector3(-phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, 1 / length, 0));
+
+        geo.vertices.push(new THREE.Vector3(-phi, -1, 0));
+        geo.vertices.push(new THREE.Vector3(0, -phi, 1));
+        geo.vertices.push(new THREE.Vector3(-1, 0, phi));
+
+        normals.push(new THREE.Vector3(-phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, -1 / length, 0));
+
+        geo.vertices.push(new THREE.Vector3(0, -phi, 1));
+        geo.vertices.push(new THREE.Vector3(1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(-1, 0, phi));
+
+        normals.push(new THREE.Vector3(-1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, phi / length));
+
+        geo.vertices.push(new THREE.Vector3(1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(0, -phi, 1));
+        geo.vertices.push(new THREE.Vector3(phi, -1, 0));
+
+        normals.push(new THREE.Vector3(0, -phi / length, 1 / length));
+        normals.push(new THREE.Vector3(0, -phi / length, 1 / length));
+        normals.push(new THREE.Vector3(0, -phi / length, 1 / length));
+
+        geo.vertices.push(new THREE.Vector3(1, 0, phi));
+        geo.vertices.push(new THREE.Vector3(phi, -1, 0));
+        geo.vertices.push(new THREE.Vector3(phi, 1, 0));
+
+        normals.push(new THREE.Vector3(1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, phi / length));
+
+        geo.vertices.push(new THREE.Vector3(1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(phi, 1, 0));
+        geo.vertices.push(new THREE.Vector3(phi, -1, 0));
+
+        normals.push(new THREE.Vector3(phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, -1 / length, 0));
+
+        geo.vertices.push(new THREE.Vector3(phi, 1, 0));
+        geo.vertices.push(new THREE.Vector3(1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(0, phi, -1));
+
+        normals.push(new THREE.Vector3(phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, 1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, 1 / length, 0));
+
+        geo.vertices.push(new THREE.Vector3(0, phi, -1));
+        geo.vertices.push(new THREE.Vector3(1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(-1, 0, -phi));
+
+        normals.push(new THREE.Vector3(1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, -phi / length));
+
+        geo.vertices.push(new THREE.Vector3(0, phi, -1));
+        geo.vertices.push(new THREE.Vector3(-1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(-phi, 1, 0));
+
+        normals.push(new THREE.Vector3(0, phi / length, -1 / length));
+        normals.push(new THREE.Vector3(0, phi / length, -1 / length));
+        normals.push(new THREE.Vector3(0, phi / length, -1 / length));
+
+        //bottom cap
+        geo.vertices.push(new THREE.Vector3(-1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(0, -phi, -1));
+
+        normals.push(new THREE.Vector3(-1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(-1 / length, 0, -phi / length));
+
+        geo.vertices.push(new THREE.Vector3(phi, -1, 0));
+        geo.vertices.push(new THREE.Vector3(0, -phi, -1));
+        geo.vertices.push(new THREE.Vector3(1, 0, -phi));
+
+        normals.push(new THREE.Vector3(1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, -phi / length));
+        normals.push(new THREE.Vector3(1 / length, 0, -phi / length));
+
+        geo.vertices.push(new THREE.Vector3(phi, -1, 0));
+        geo.vertices.push(new THREE.Vector3(0, -phi, 1));
+        geo.vertices.push(new THREE.Vector3(0, -phi, -1));
+
+        normals.push(new THREE.Vector3(phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(phi / length, -1 / length, 0));
+
+        geo.vertices.push(new THREE.Vector3(-phi, -1, 0));
+        geo.vertices.push(new THREE.Vector3(0, -phi, -1));
+        geo.vertices.push(new THREE.Vector3(0, -phi, 1));
+
+        normals.push(new THREE.Vector3(0, -phi / length, 1 / length));
+        normals.push(new THREE.Vector3(0, -phi / length, 1 / length));
+        normals.push(new THREE.Vector3(0, -phi / length, 1 / length));
+
+        geo.vertices.push(new THREE.Vector3(-phi, -1, 0));
+        geo.vertices.push(new THREE.Vector3(-1, 0, -phi));
+        geo.vertices.push(new THREE.Vector3(0, -phi, -1));
+
+        normals.push(new THREE.Vector3(-phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, -1 / length, 0));
+        normals.push(new THREE.Vector3(-phi / length, -1 / length, 0));
+
+        var numFaces = 0;
+        for (var i = 0; i < geo.vertices.length; i += 3) {
+          geo.faces.push(new THREE.Face3(i, i + 1, i + 2));
+          geo.faces[numFaces].vertexNormals[0] = normals[i];
+          geo.faces[numFaces].vertexNormals[1] = normals[i + 1];
+          geo.faces[numFaces].vertexNormals[2] = normals[i + 2];
+          numFaces++;
+        }
+
+        return geo;
+      }
+
+      function makeShape(geo) {
+        //makes a Cannon shape from custom geometry
+        //convert points to vec3
+        const points = [];
+        for (var i = 0; i < geo.vertices.length; i++) {
+          points.push(
+            new CANNON.Vec3(
+              geo.vertices[i].x,
+              geo.vertices[i].y,
+              geo.vertices[i].z
+            )
+          );
+        }
+
+        const faces = [];
+        for (let i = 0; i < geo.vertices.length; i += 3) {
+          faces.push([i, i + 1, i + 2]);
+        }
+
+        return new CANNON.ConvexPolyhedron(points, faces);
+      }
+
+      function textureD4(geo) {
+        // array of face descriptors
+        var UVs = [];
+        function faceCoords(as, at, bs, bt, cs, ct) {
+          UVs.push([
+            new THREE.Vector2(as, at),
+            new THREE.Vector2(bs, bt),
+            new THREE.Vector2(cs, ct),
+          ]);
+        }
+
+        faceCoords(0, 0, 1, 0, 0.5, 0.8); //124
+        faceCoords(0, 0, 1, 0, 0.5, 0.8); //234
+        faceCoords(0.5, 0.8, 0, 0, 1, 0); //123
+        faceCoords(0, 0, 1, 0, 0.5, 0.8); //134
+
+        // attach this to the geometry
+        geo.faceVertexUvs = [UVs];
+      }
+
+      function textureD8(geo) {
+        // array of face descriptors
+        var UVs = [];
+        function faceCoords(as, at, bs, bt, cs, ct) {
+          UVs.push([
+            new THREE.Vector2(as, at),
+            new THREE.Vector2(bs, bt),
+            new THREE.Vector2(cs, ct),
+          ]);
+        }
+
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+
+        // attach this to the geometry
+        geo.faceVertexUvs = [UVs];
+      }
+
+      function textureD20(geo) {
+        // array of face descriptors
+        var UVs = [];
+        function faceCoords(as, at, bs, bt, cs, ct) {
+          UVs.push([
+            new THREE.Vector2(as, at),
+            new THREE.Vector2(bs, bt),
+            new THREE.Vector2(cs, ct),
+          ]);
+        }
+
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0, 0, 1, 0, 0.5, 0.8);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+        faceCoords(0.5, 0.8, 0, 0, 1, 0);
+
+        // attach this to the geometry
+        geo.faceVertexUvs = [UVs];
+      }
+
+      function makeDie() {
+        //returns die mesh
+        var geo;
+        var mesh;
+
+        if (shape == "d4") {
+          geo = d4();
+
+          const texture1 = loader.load("../textures/face124.png");
+          const texture2 = loader.load("../textures/face123.png");
+          const texture3 = loader.load("../textures/face134.png");
+          const texture4 = loader.load("../textures/face234.png");
+
+          var materials = [
+            new THREE.MeshStandardMaterial({ map: texture3 }),
+            new THREE.MeshStandardMaterial({ map: texture2 }),
+            new THREE.MeshStandardMaterial({ map: texture1 }),
+            new THREE.MeshStandardMaterial({ map: texture4 }),
+          ];
+
+          mesh = new THREE.Mesh(geo, materials);
+          for (var i = 0; i < mesh.geometry.faces.length; i++) {
+            mesh.geometry.faces[i].materialIndex = i;
+          }
+          textureD4(geo);
+
+          mesh.position.y = 1000;
+          scene.add(mesh);
+        } else if (shape == "d6") {
+          geo = new THREE.BoxGeometry(100, 100, 100);
+
+          const texture1 = loader.load("../textures/face1.jpg");
+          const texture2 = loader.load("../textures/face2.jpg");
+          const texture3 = loader.load("../textures/face3.jpg");
+          const texture4 = loader.load("../textures/face4.jpg");
+          const texture5 = loader.load("../textures/face5.jpg");
+          const texture6 = loader.load("../textures/face6.jpg");
+
+          var materials = [
+            new THREE.MeshStandardMaterial({ map: texture1 }),
+            new THREE.MeshStandardMaterial({ map: texture2 }),
+            new THREE.MeshStandardMaterial({ map: texture3 }),
+            new THREE.MeshStandardMaterial({ map: texture4 }),
+            new THREE.MeshStandardMaterial({ map: texture5 }),
+            new THREE.MeshStandardMaterial({ map: texture6 }),
+          ];
+          mesh = new THREE.Mesh(geo, materials);
+
+          mesh.position.y = 1000;
+          scene.add(mesh);
+        } else if (shape == "d20") {
+          // geo = d20();
+          geo = new THREE.IcosahedronGeometry(125, 0);
+          const texture1 = loader.load("../textures/d8face1.png");
+          const texture2 = loader.load("../textures/d8face2.png");
+          const texture3 = loader.load("../textures/d8face3.png");
+          const texture4 = loader.load("../textures/d8face4.png");
+          const texture5 = loader.load("../textures/d8face5.png");
+          const texture6 = loader.load("../textures/d8face6.png");
+          const texture7 = loader.load("../textures/d8face7.png");
+          const texture8 = loader.load("../textures/d8face8.png");
+          const texture9 = loader.load("../textures/d20face9.png");
+          const texture10 = loader.load("../textures/d20face10.png");
+          const texture11 = loader.load("../textures/d20face11.png");
+          const texture12 = loader.load("../textures/d20face12.png");
+          const texture13 = loader.load("../textures/d20face13.png");
+          const texture14 = loader.load("../textures/d20face14.png");
+          const texture15 = loader.load("../textures/d20face15.png");
+          const texture16 = loader.load("../textures/d20face16.png");
+          const texture17 = loader.load("../textures/d20face17.png");
+          const texture18 = loader.load("../textures/d20face18.png");
+          const texture19 = loader.load("../textures/d20face19.png");
+          const texture20 = loader.load("../textures/d20face20.png");
+
+          var materials = [
+            new THREE.MeshStandardMaterial({ map: texture1 }),
+            new THREE.MeshStandardMaterial({ map: texture2 }),
+            new THREE.MeshStandardMaterial({ map: texture3 }),
+            new THREE.MeshStandardMaterial({ map: texture4 }),
+            new THREE.MeshStandardMaterial({ map: texture5 }),
+            new THREE.MeshStandardMaterial({ map: texture6 }),
+            new THREE.MeshStandardMaterial({ map: texture7 }),
+            new THREE.MeshStandardMaterial({ map: texture8 }),
+            new THREE.MeshStandardMaterial({ map: texture9 }),
+            new THREE.MeshStandardMaterial({ map: texture10 }),
+            new THREE.MeshStandardMaterial({ map: texture11 }),
+            new THREE.MeshStandardMaterial({ map: texture12 }),
+            new THREE.MeshStandardMaterial({ map: texture13 }),
+            new THREE.MeshStandardMaterial({ map: texture14 }),
+            new THREE.MeshStandardMaterial({ map: texture15 }),
+            new THREE.MeshStandardMaterial({ map: texture16 }),
+            new THREE.MeshStandardMaterial({ map: texture17 }),
+            new THREE.MeshStandardMaterial({ map: texture18 }),
+            new THREE.MeshStandardMaterial({ map: texture19 }),
+            new THREE.MeshStandardMaterial({ map: texture20 }),
+          ];
+
+          mesh = new THREE.Mesh(geo, materials);
+          for (var i = 0; i < mesh.geometry.faces.length; i++) {
+            mesh.geometry.faces[i].materialIndex = i;
+          }
+          textureD20(geo);
+
+          mesh.position.y = 1000;
+          scene.add(mesh);
+        } else {
+          geo = new THREE.OctahedronGeometry(100);
+          const texture1 = loader.load("../textures/d8face1.png");
+          const texture2 = loader.load("../textures/d8face2.png");
+          const texture3 = loader.load("../textures/d8face3.png");
+          const texture4 = loader.load("../textures/d8face4.png");
+          const texture5 = loader.load("../textures/d8face5.png");
+          const texture6 = loader.load("../textures/d8face6.png");
+          const texture7 = loader.load("../textures/d8face7.png");
+          const texture8 = loader.load("../textures/d8face8.png");
+
+          var materials = [
+            new THREE.MeshStandardMaterial({ map: texture1 }),
+            new THREE.MeshStandardMaterial({ map: texture2 }),
+            new THREE.MeshStandardMaterial({ map: texture3 }),
+            new THREE.MeshStandardMaterial({ map: texture4 }),
+            new THREE.MeshStandardMaterial({ map: texture5 }),
+            new THREE.MeshStandardMaterial({ map: texture6 }),
+            new THREE.MeshStandardMaterial({ map: texture7 }),
+            new THREE.MeshStandardMaterial({ map: texture8 }),
+          ];
+
+          mesh = new THREE.Mesh(geo, materials);
+          for (var i = 0; i < mesh.geometry.faces.length; i++) {
+            mesh.geometry.faces[i].materialIndex = i;
+          }
+          textureD8(geo);
+
+          mesh.position.y = 1000;
+          scene.add(mesh);
+        }
+
+        TW.render();
+        return mesh;
+      }
+
+      function addObjectPhysics() {
+        addFloorPhysics();
+        addPlanePhysics();
+        addWallPhysics();
+      }
+
+      function addFloorPhysics() {
+        var q = floor.quaternion;
+        var floorBody = new CANNON.Body({
+          mass: 0, // mass = 0 makes the body static
+          material: physicsMaterial,
+          shape: new CANNON.Plane(),
+          quaternion: new CANNON.Quaternion(-q._x, q._y, q._z, q._w),
+        });
+        world.addBody(floorBody);
+      }
+
+      function addPlanePhysics() {
+        var q = plane.quaternion;
+        var p = plane.position;
+        var v = plane.geometry.vertices;
+        var planeBody = new CANNON.Body({
+          mass: 0,
+          material: physicsMaterial,
+          shape: new CANNON.Box(new CANNON.Vec3(1500, 1500, 1)),
+          quaternion: new CANNON.Quaternion(-q._x, q._y, q._z, q._w),
+          position: new CANNON.Vec3(p.x, p.y, p.z),
+        });
+        world.addBody(planeBody);
+      }
+
+      function addWallPhysics() {
+        //wall at z = -1500
+        var q = wall.quaternion;
+        var p = wall.position;
+        var v = wall.geometry.vertices;
+        var wallBody = new CANNON.Body({
+          mass: 0,
+          material: physicsMaterial,
+          shape: new CANNON.Box(new CANNON.Vec3(1500, 400, 1)),
+          quaternion: new CANNON.Quaternion(-q._x, q._y, q._z, q._w),
+          position: new CANNON.Vec3(p.x, p.y, p.z),
+        });
+        world.addBody(wallBody);
+
+        //wall at z = 1500
+        var q = wall2.quaternion;
+        var p = wall2.position;
+        var v = wall2.geometry.vertices;
+        var wall2Body = new CANNON.Body({
+          mass: 0,
+          material: physicsMaterial,
+          shape: new CANNON.Box(new CANNON.Vec3(1500, 400, 1)),
+          quaternion: new CANNON.Quaternion(-q._x, q._y, q._z, q._w),
+          position: new CANNON.Vec3(p.x, p.y, p.z),
+        });
+        world.addBody(wall2Body);
+
+        //wall at x = 1500
+        var q = wall3.quaternion;
+        var p = wall3.position;
+        var v = wall3.geometry.vertices;
+        var wall3Body = new CANNON.Body({
+          mass: 0,
+          material: physicsMaterial,
+          shape: new CANNON.Box(new CANNON.Vec3(1500, 400, 1)),
+          quaternion: new CANNON.Quaternion(-q._x, q._y, q._z, q._w),
+          position: new CANNON.Vec3(p.x, p.y, p.z),
+        });
+        world.addBody(wall3Body);
+
+        //wall at x = -1500
+        var q = wall4.quaternion;
+        var p = wall4.position;
+        var v = wall4.geometry.vertices;
+        var wall4Body = new CANNON.Body({
+          mass: 0,
+          material: physicsMaterial,
+          shape: new CANNON.Box(new CANNON.Vec3(1500, 400, 1)),
+          quaternion: new CANNON.Quaternion(-q._x, q._y, q._z, q._w),
+          position: new CANNON.Vec3(p.x, p.y, p.z),
+        });
+        world.addBody(wall4Body);
+      }
+
+      function addDiePhysics() {
+        //returns collision body for die
+        var q = dice.quaternion;
+        var p = dice.position;
+
+        var bodyShape;
+        if (shape == "d4") {
+          bodyShape = makeShape(d4());
+        } else if (shape == "d6") {
+          bodyShape = new CANNON.Box(new CANNON.Vec3(50, 50, 50));
+        } else if (shape == "d8") {
+          bodyShape = makeShape(new THREE.OctahedronGeometry(100));
+        } else if (shape == "d20") {
+          // bodyShape = makeShape(d20());
+          bodyShape = makeShape(new THREE.IcosahedronGeometry(125, 0));
+        }
+
+        //dice should have a random velocity so the result of the roll is random
+        let rand = Math.random() * 5;
+        let yRand = Math.random() * 20;
+        var vel = new CANNON.Vec3(25 + rand, 40 + yRand, 15 + rand); //TODO
+
+        var diceBody = new CANNON.Body({
+          mass: 10,
+          material: physicsMaterial,
+          shape: bodyShape,
+          linearDamping: 0.0,
+          velocity: vel,
+          angularVelocity: new CANNON.Vec3(
+            20 * Math.random() - 10,
+            20 * Math.random() - 10,
+            20 * Math.random() - 10
+          ),
+          quaternion: new CANNON.Quaternion(q._x, q._y, q._z, q._w),
+          position: new CANNON.Vec3(p.x, p.y, p.z),
+        });
+        world.addBody(diceBody);
+        diceBodies = diceBody;
+        return diceBody;
+      }
+
+      function addEventListeners() {
+        window.addEventListener("resize", function (e) {
+          windowHalfX = window.innerWidth / 2;
+          windowHalfY = window.innerHeight / 2;
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          if (typeof controls != "undefined") controls.handleResize();
+        });
+      }
+
+      function render() {
+        if (effectController.newShape !== shape) {
+          shape = effectController.newShape;
+          scene.remove(dice); //remove old die
+          world.removeBody(diceBodies); //remove collision body
+          dice = makeDie(); //make die with new shape
+          diceBodies = [];
+          addDiePhysics();
+        }
+        requestAnimationFrame(render);
+        TW.render();
+        updatePhysics();
+      }
+
+      function updatePhysics() {
+        world.step(1 / 60);
+        dice.position.copy(diceBodies.position);
+        dice.quaternion.copy(diceBodies.quaternion);
+      }
+
+      addEventListeners();
+      render(); //updates dice
+    </script>
+  </body>
+</html>
